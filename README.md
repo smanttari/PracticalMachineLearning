@@ -1,12 +1,4 @@
----
-title: "Practical Machine Learning Course Project"
-author: "smanttari"
-output: 
-  html_document: 
-    keep_md: yes
----
-
-
+# Practical Machine Learning Course Project
 
 ## Background
 
