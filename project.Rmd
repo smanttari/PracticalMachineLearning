@@ -1,0 +1,150 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "smanttari"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+People regularly quantify *how much* of a particular activity they do but they rarely quantify *how well* they perform it.
+The approach of this study is to investigate the quality of weight-lifting exercise.
+
+Read more from the original publication:
+
+> Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+> http://groupware.les.inf.puc-rio.br/har
+
+
+## Data 
+
+Data includes measurements of 6 participants performing dumbbell lifts correctly and incorrectly in 5 different ways. Measurements where gathered from sensors on the belt, forearm, arm and dumbell.
+
+First five rows of the first ten variables:
+
+```{r loaddata, echo=TRUE}
+pml <- read.csv("data/pml-training.csv")
+pml[1:5,1:10]
+```
+
+The total number of observations is 19622 over 160 variables.
+
+
+```{r dimdata, echo=TRUE}
+dim(pml)
+```
+
+
+## Goal
+
+The goal of this project is to use machine learning methods for predicting the manner in which participants did the exercise.
+
+The variable of interest is *classe*:
+
+```{r classe, echo=TRUE}
+table(pml$classe)
+```
+
+## Data cleaning
+
+The original dataset includes some variables that are extremely sparse. That means that most of the observations are either NA or empty. These features are dropped off. Also some irrelevant variables like id, timestamp and user name are removed.
+
+The cleaned dataset includes 54 features.
+
+
+```{r cleandata, echo=TRUE}
+na_counts <- sapply(pml, function(x) sum(is.na(x)|x == ''))
+na_counts <- data.frame(column = names(na_counts), na_count = na_counts, row.names = NULL)
+columns_to_drop <- as.character(na_counts[na_counts$na_count > 0,'column'])
+columns_to_drop <- c(columns_to_drop,
+                     'X','user_name','raw_timestamp_part_1','raw_timestamp_part_2','cvtd_timestamp','new_window')
+pml_cleaned <- pml[names(pml)[!names(pml) %in% columns_to_drop]]
+dim(pml_cleaned)
+```
+
+
+## Exploring the data
+
+```{r ggplot2}
+library(ggplot2)
+```
+
+Some graphical illustrations how measurements of different sensors relates to the manner in which the exercise was done.
+
+```{r forearm}
+qplot(x = roll_forearm, y = pitch_forearm, colour = classe, data=pml_cleaned, 
+      main = "Forearm movements relationship to class")
+```
+```{r dumbbell}
+qplot(x = magnet_dumbbell_x, y = magnet_dumbbell_z, colour = classe, data=pml_cleaned,
+      main = "Dumbell movements relationship to class")
+```
+
+## Classification
+
+The goal was to predict the manner in which the exercise was done (classe: A,B,C,D,E) using the measurement data of the sensors. The Random Forest method was chosen for this classification task because its capability of handle large number of possible noisy features. Simple decision trees where also tested but it turn out that random forest performs much better.
+
+The training of the model was done with caret-package.
+```{r caret}
+library(caret)
+```
+
+### Creating training and test datasets
+
+75% of the data was used for model training and 25% was hold out for testing.
+
+```{r datasplit, echo=TRUE}
+set.seed(3856)
+m <- length(pml_cleaned)
+inTrain <- createDataPartition(pml_cleaned$classe, p = 3/4)[[1]]
+x_train <- pml_cleaned[inTrain, 1:(m-1)]
+y_train <- pml_cleaned[inTrain, m]
+x_test <- pml_cleaned[-inTrain, 1:(m-1)]
+y_test <- pml_cleaned[-inTrain, m]
+```
+
+### Training the model
+
+For estimating the performance of the model on unseen data the method called cross-validation was used. In k-fold cross-validation data is splitted into k equal sized subsets. In turn each of these fold is used for validation and other (k-1) folds are used for model training. Finally the average model performance is calculated.
+
+In this exercise 5-fold cross-validation was used:
+
+```{r cv, echo=TRUE}
+train_control <- trainControl(method="cv", number=5)
+```
+
+Finally the model was trained using random forest algorithm
+```{r fit}
+fit <- train(x_train, y_train, trControl = train_control, method = 'rf')
+```
+
+## Evaluating model performance
+
+The average accuracy of the model was 99.7%. 
+
+```{r conff}
+confusionMatrix.train(fit)
+```
+
+The confusion matrix show that almost all training samples were classified correctly.
+
+```{r model}
+fit$finalModel
+```
+
+
+### Performance on test set
+
+The out of sample performance of the model was estimated using the hold out test set. The estimated accuracy of the model was 99.8% and respectively the estimated error rate was 0.2%.
+
+```{r pred}
+pred <- predict(fit, x_test)
+confusionMatrix(y_test, pred)
+```
+
